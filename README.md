@@ -10,6 +10,79 @@ ThermalFly 仓库提供源码、配置和文档。运行已有场景需要在本
 
 [走廊双模态飞行与 OpenFly RGB 导航](outputs/corridor_native_flights/README.md) 提供走廊长距离飞行、墙面碰撞和红色展板导航的第一视角录像、逐帧位姿、航点文件及复现命令。该场景使用 `corridor_full_native_20261121_1645/base_30000` 的 RGB 和红外模型。
 
+## 训练会议室与走廊共用的 RGB 航点策略
+
+第一版采用行为克隆。冻结的 OpenFly-Agent 7B 读取英文指令、当前 RGB 和前两次决策的 RGB。共享 PyTorch 航点头还读取当前机体系线速度、角速度、重力方向和云台角。训练标签来自每个专家决策的三个连续航段。推理时只执行首段，刷新图像和机体状态后重新规划。
+
+### 准备数据和提取特征
+
+在仓库根目录运行以下命令。模拟器和训练脚本使用装有本仓库依赖的环境，OpenFly 使用 `scripts/setup_openfly.sh` 配置的独立推理环境。准备好本地专家数据集及 `splits.json`，每个回合须有 `episode.json`、`frames.jsonl`、`decisions.jsonl` 和决策引用的 RGB PNG。[逐字段数据格式](EXPERT_EPISODE_FORMAT.md)
+
+```bash
+conda activate thermal_gaussian_5070
+# 首次安装 OpenFly 推理环境与官方权重时运行
+bash scripts/setup_openfly.sh
+
+DATASET=outputs/expert_rgbt_20261123
+RUN=outputs/thermalfly_rgb_v1
+python -m openfly_rgb.waypoint_data --dataset "$DATASET" --output "$RUN/cache"
+python -m openfly_rgb.train_waypoint --cache "$RUN/cache" --output "$RUN/train"
+```
+
+缓存按回合写入，每回合清空图像历史。提取中断后可用相同命令复用已校验的回合。如有人工审核导出，在提取命令加 `--review <路径>` 以排除退回回合。`room_orbit_vary` 的英文指令在输入时校正为前半程经过高位、后半程经过低位，原始轨迹保持原样。重复训练时为 `--output` 选择新目录。
+
+### 训练、选模与闭环复现
+
+每个训练子集单独拟合降维和归一化。OpenFly 的 4,096 维视觉语言特征与 1,536 维当前图像空间特征各投影为 32 维，与 10 维状态拼接。训练比较线性头和单隐藏层 MLP，在固定验证集上选择配置并校准 STOP 阈值。最终策略保存在 `train/policy.pt`，离线指标和子集、种子、验证选择过程保存在 `train/report.json`。
+
+默认按路线族、回合平衡采样，使用 AdamW，学习率和权重衰减均为 0.001，批大小 32，最多训练 100 轮，早停耐心为 10 轮。航点回归使用 Smooth L1，STOP 的二元交叉熵正类权重为 3。MLP 的隐藏层为 32 维，Dropout 为 0.1。验证集首槽 STOP 的 F1 用于选择阈值。
+
+每个航段预测机头水平坐标系中的前、左、上、偏航增量，以及 STOP、时长、末速和云台俯仰。连续量仅用 MOVE 监督，走廊固定云台，缺失的云台标签和填充槽通过掩码处理。闭环沿当前实际速度衔接相邻航段，STOP 触发 2.5 秒主动悬停，随后检查速度与漂移。
+
+```bash
+# 专家目标和模型预测通过同一执行器。每条命令使用新的输出目录。
+python -m openfly_rgb.waypoint_rollout --dataset "$DATASET" --episode room_inspect_ac \
+  --oracle --output "$RUN/oracle_ac"
+python -m openfly_rgb.waypoint_rollout --dataset "$DATASET" --episode room_inspect_ac \
+  --head "$RUN/train/policy.pt" --output "$RUN/learned_ac"
+python -m openfly_rgb.score_waypoint --dataset "$DATASET" "$RUN/oracle_ac" "$RUN/learned_ac"
+
+# 同一起点、朝向、进场速度和云台角，分别要求观察笔记本与沙发
+python -m openfly_rgb.waypoint_rollout --dataset "$DATASET" \
+  --head "$RUN/train/policy.pt" --episode room_inspect_laptop room_inspect_sofa \
+  --spawn-from room_inspect_ac --output "$RUN/paired_targets_replay"
+```
+
+闭环需要对应的本地场景模型、碰撞几何和相机标定。查看每次飞行的 `summary.json`、`decisions.jsonl`、`frames.jsonl` 与第一视角视频。事后评分使用真实相机位姿计算地标中心是否入画、接近距离和子目标观察顺序，结果写入 `geometry.json`。几何投影不能判断遮挡，物体辨认可结合视频复核。
+
+### 2026-11-24 首次训练结果
+
+会议室和走廊共 34 个回合。训练、验证、测试依次为 26/6/2 个回合和 555/110/53 个决策。两个物理场景均在训练集中。采集元数据的人工审核状态为 `pending`，本次使用通过结构检查的全部回合。训练仅使用 RGB。冻结 OpenFly 在 RTX 5070 Ti 上以 4 bit 提取特征，小型 PyTorch 航点头在 CPU 上训练。
+
+| 训练回合 / 决策数 | 线性头验证损失 | MLP 验证损失 |
+|---|---:|---:|
+| 8 / 147 | 1.169 ± 0.033 | 0.825 ± 0.014 |
+| 16 / 318 | **0.816 ± 0.004** | 0.822 ± 0.016 |
+| 26 / 555 | 1.005 ± 0.021 | 0.904 ± 0.006 |
+
+表中为按回合平均的验证损失，再对三个随机种子取均值与标准差。按组均值选出 16 回合线性头，选组内验证损失居中的种子 47 部署，STOP 阈值 0.7031。下表的误差对回合等权，STOP 单独列出实际决策数。
+
+| 离线评估 | 首段位置误差 | 首段偏航误差 | 三段终点误差 | STOP 命中 / 误报 / 漏判 |
+|---|---:|---:|---:|---:|
+| 验证，6 回合 | 0.263 m | 4.32° | 0.580 m | 4 / 0 / 2 |
+| 测试，2 回合 | 0.191 m | 7.04° | 0.417 m | 1 / 2 / 1 |
+
+**在同一起点、同一任务、同一执行器下，专家命令完成 8/8 个留出回合，学习策略完成 0/6 个验证回合、0/2 个测试回合。** 成功要求发出 STOP、通过悬停稳定检查，并满足该回合的位置、航向和速度容差。8 次专家回放的终点误差均低于 0.05 m，四条带物体观察的回合都满足有序观察的几何判据。额外的三条训练路线控制检查也全部到点。对学习策略，8 个留出起点在线渲染所得的首段位置预测、偏航预测和 STOP 概率均与离线缓存重算一致。
+
+| 学习策略的测试任务 | 实际飞行结果 |
+|---|---|
+| 走廊升高并加速 | 飞行 5.82 m 后触发已知自由空间边界，距目标 10.88 m |
+| 搜索笔记本再观察沙发 | 飞行 1.60 m 后提前悬停，距目标 2.84 m。两处地标中心在本次飞行中均未进入 RGB 画面 |
+
+另从 `room_inspect_ac` 的同一初始状态分别下达观察笔记本、观察沙发的指令。两次的首段位移预测相差 0.063 m，最后分别距各自参考终点 1.55 m、2.13 m，均未在目标的参考观察距离内将其置于画面中央。这组对照显示指令改变了预测，但当前策略尚未完成目标区分与抵近。
+
+本地 `outputs/thermalfly_rgb_v1/` 下的 `oracle_heldout/`、`heldout/` 分别保存八条留出任务的专家回放与学习策略飞行记录，`same_start/` 保存换指令对照，`oracle/` 保存三条训练路线的执行器检查。八次留出策略飞行中有四次在错误位置停稳，两次发出 STOP 后悬停未稳，两次触发已知空间边界。下一轮可以优先补采远离终点却外观相似的继续飞行样本，以及目标仍在视野外时的转向搜索和偏航恢复样本。
+
 ## 用 OpenFly-Agent 在会议室进行 RGB 指令导航
 
 从示范拟合、三帧视觉推理到航点执行和任务评分的完整过程，见[会议室 OpenFly RGB 导航流程](OPENFLY_RGB_WORKFLOW.md)。

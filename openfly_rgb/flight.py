@@ -15,7 +15,7 @@ from engine import PolicyFlightSimulator
 ROOM = Path(__file__).resolve().parents[1] / "scenes" / "room65_selected_anchored"
 sys.path.insert(0, str(ROOM))
 try:
-    from fly import KnownSpace, controller
+    from fly import KnownSpace, commands, controller
     from room import RigScene
 finally:
     sys.path.remove(str(ROOM))
@@ -72,7 +72,8 @@ class RoomFlight:
     """Closed-loop flight with collision receipts and observed-free-volume checks."""
 
     def __init__(self, spawn=None, yaw_deg=None, seed=65, resolution=0.5, max_steps=None,
-                 *, scene_root=ROOM, scene_factory=RigScene, known_space=None, render_thermal=False):
+                 *, scene_root=ROOM, scene_factory=RigScene, known_space=None, render_thermal=False,
+                 spawn_velocity_w_mps=(0., 0., 0.)):
         if max_steps is not None and (type(max_steps) is not int or max_steps < 1):
             raise ValueError("max_steps must be a positive integer")
         if spawn is None or yaw_deg is None:
@@ -85,7 +86,7 @@ class RoomFlight:
             scene_root / "models/rgb.ply", point_cloud=scene_root / "collision/rgb_surface_m.ply",
             config="nominal", scene_factory=partial(scene_factory, render_thermal=render_thermal),
             seed=seed, resolution=resolution,
-            spawn=spawn, yaw=yaw_deg,
+            spawn=spawn, yaw=yaw_deg, spawn_velocity_w_mps=spawn_velocity_w_mps,
         )
         try:
             if max_steps is not None:
@@ -127,13 +128,16 @@ class RoomFlight:
         hold[0] += WAYPOINT_HOLD_SECONDS
         return self._track(np.vstack([knots, hold]), False, on_tick)
 
-    def _track(self, knots, stop, on_tick):
+    def _track(self, knots, stop, on_tick, *, sample=commands, before_tick=None):
         if self.outcome is not None:
             raise RuntimeError(f"Flight has already ended: {self.outcome}")
-        ticks = int(np.ceil(knots[-1, 0] / CONTROL_DT))
+        ticks = int(np.ceil(knots[-1, 0] / CONTROL_DT - 1e-9))
         for index in range(ticks):
             before = np.asarray(self.receipt["state"]["position"])
-            command, _ = controller(self.sim, self.receipt, knots, (index + 0.5) * CONTROL_DT)
+            mid_time = (index + 0.5) * CONTROL_DT
+            command, _ = controller(self.sim, self.receipt, knots, mid_time, sample=sample)
+            if before_tick is not None:
+                before_tick((index + 1) * CONTROL_DT)
             self.sim.step(command, format="body_rates_thrust")
             state = self.receipt["state"]
             self.path_m += float(np.linalg.norm(state["position"] - before))
