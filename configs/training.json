@@ -1,0 +1,67 @@
+{
+  "name": "training",
+  "source": {
+    "reference": "GRaD-Nav drone_long_traj.py and gradnav/drone_long_traj.yaml",
+    "parameters": "source-code ranges, not paper Table III",
+    "rotation": "corrected standard wxyz; legacy rotation defects are not reproduced"
+  },
+  "lpf": {
+    "enabled": true,
+    "alpha": 0.5
+  },
+  "delay": {
+    "enabled": true,
+    "body_rate_alpha": 0.8,
+    "thrust_alpha": 0.7,
+    "history": "legacy_two_step"
+  },
+  "randomization": {
+    "enabled": true,
+    "mass": [
+      1.0,
+      1.2
+    ],
+    "max_thrust": [
+      24.0,
+      28.0
+    ],
+    "inertia_fraction": 0.2
+  },
+  "dynamics": {
+    "mass": 1.1,
+    "max_thrust": 26.0,
+    "inertia": [
+      0.01,
+      0.012,
+      0.025
+    ],
+    "kp": [
+      1.0,
+      1.2,
+      2.5
+    ],
+    "kd": [
+      0.001,
+      0.001,
+      0.002
+    ],
+    "drag_coeff": 0.5,
+    "cross_area": 0.1,
+    "air_density": 1.225,
+    "rotor_noise_std": 0.01,
+    "br_noise_std": 0.01
+  },
+  "observation": {
+    "history": 5,
+    "visual_dim": 16,
+    "latent_dim": 24,
+    "noise_level": 0.1,
+    "require_obs_rms": true
+  },
+  "limits": {
+    "speed": 20.0,
+    "body_rate": 15.0,
+    "tilt_deg": 85.0,
+    "max_steps": 1200
+  }
+}

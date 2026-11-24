@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#edf0ec"><title>飞行回放台 · GRaD-Nav</title><link rel="stylesheet" href="/assets/style.css"></head>
+<body><header><div class="brand"><span class="mark" aria-hidden="true"></span><b>GRaD-Nav</b><i></i><span>室内无人机模拟器</span></div><div class="connection"><span id="lamp" class="lamp"></span><span id="online">正在连接</span></div></header>
+<main><div class="titlebar"><div><div class="scene"><span class="square"></span> 会议室 6＋5 <span class="divide">/</span> PlanarGS RGB · 锚定红外</div><h1>飞行回放台</h1></div><div class="spec">20 Hz <span>控制频率</span><i></i> 200 Hz <span>动力学</span></div></div>
+<div class="layout"><section class="viewer card">
+<div class="cardhead"><h2><span class="viewicon" aria-hidden="true">⌾</span> 场景观察</h2><div class="tabs"><button id="fpTab" aria-pressed="true">第一视角</button><button id="mapTab" aria-pressed="false">空间轨迹</button></div></div>
+<div id="stage"><div id="fp"><img id="mainImg" alt="无人机第一视角"><canvas id="overlay"></canvas><div class="stage-tag"><span class="lamp"></span><span id="channel">RGB 可见光</span></div>
+<button id="swap" title="切换主画面的传感器" aria-label="切换 RGB 与热红外主画面"><img id="subImg" alt="同步的另一模态"><span id="subLabel">热红外 ↗</span></button></div>
+<div id="space" hidden><canvas id="map" aria-label="场景三维点云与离散航点"></canvas><div class="stage-tag">三维点云</div><div class="mapbar"><button id="iso">斜视</button><button id="top">俯视</button><button id="zoomIn" aria-label="放大">＋</button><button id="zoomOut" aria-label="缩小">−</button></div><div class="legend"><span class="orange">●</span> 航点 <span class="mint">▲</span> 无人机</div></div></div>
+<div class="transport"><button id="play" class="play" disabled>执行</button><button id="restart" class="minor" disabled>重播</button><div class="progress"><span id="progressBar"></span></div><output id="time">00:00.00</output></div>
+<div class="telemetry"><div><span>当前帧</span><b id="frame">—</b></div><div><span>飞行高度</span><b id="height">—</b></div><div><span>飞行速度</span><b id="speed">—</b></div><div><span>安全净空</span><b id="gap">—</b></div></div>
+</section>
+<aside>
+<section class="card import"><div class="cardhead"><h2>飞行记录</h2><span id="playState" class="pill">待命</span></div>
+<div class="group"><label class="heading" for="actionFile"><span class="glyph">▷</span> 动作记录</label><p>导入逐帧指令，从记录的初始位姿开始执行。</p>
+<label class="upload" id="actionDrop"><strong>↑ &nbsp; 选择动作文件</strong><small>JSONL</small><input type="file" id="actionFile" accept=".jsonl,.ndjson,application/x-ndjson"></label>
+<div id="actionName" class="name">尚未导入文件</div></div>
+<div class="group"><label class="heading" for="wayFile"><span class="glyph pathglyph">∴</span> 航点轨迹</label><p>导入世界坐标，查看标记在场景中的离散航点。</p>
+<label class="upload" id="wayDrop"><strong>↑ &nbsp; 选择航点文件</strong><small>CSV</small><input type="file" id="wayFile" accept=".csv,text/csv"></label>
+<div class="wayinfo"><div id="wayName" class="name">尚未加载航点</div><button id="clear" class="textbutton" hidden>清除</button></div></div></section>
+<section class="card library"><h2>场景内置飞行</h2><label class="sr" for="library">选择飞行记录</label><select id="library"></select><div class="pair"><button id="sampleAction" class="dark">执行动作</button><button id="sampleWay" class="secondary">显示航点</button></div></section>
+<p id="notice" role="status"></p></aside></div></main>
+<script type="module" src="/assets/app.js"></script></body></html>

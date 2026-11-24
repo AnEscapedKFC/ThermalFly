@@ -1,0 +1,19 @@
+{
+  "schema": "gradnav-action-sequence/v1",
+  "description": "Twelve-second explicit normalized GRaD-Nav action sequence: accelerate gently, translate about one meter, counter-pitch to brake, then yaw left and back. Final zero rates with hover thrust are not position hold. Open-loop demonstration, not a trained navigation policy or guaranteed obstacle course.",
+  "format": "gradnav_normalized",
+  "dt": 0.05,
+  "segments": [
+    {"name": "hover", "steps": 20, "action": [0, 0, 0, "hover"]},
+    {"name": "pitch_forward", "steps": 20, "action": [0, 0.05, 0, "hover"]},
+    {"name": "level_after_pitch", "steps": 20, "action": [0, -0.05, 0, "hover"]},
+    {"name": "coast_forward", "steps": 40, "action": [0, 0, 0, "hover"]},
+    {"name": "pitch_brake", "steps": 20, "action": [0, -0.05, 0, "hover"]},
+    {"name": "level_after_brake", "steps": 20, "action": [0, 0.05, 0, "hover"]},
+    {"name": "settle_zero_rates", "steps": 20, "action": [0, 0, 0, "hover"]},
+    {"name": "yaw_left", "steps": 20, "action": [0, 0, 0.20, "hover"]},
+    {"name": "coast_after_turn", "steps": 20, "action": [0, 0, 0, "hover"]},
+    {"name": "yaw_right", "steps": 20, "action": [0, 0, -0.20, "hover"]},
+    {"name": "final_zero_rates", "steps": 20, "action": [0, 0, 0, "hover"]}
+  ]
+}
